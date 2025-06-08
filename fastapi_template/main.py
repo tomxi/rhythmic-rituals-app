@@ -48,24 +48,100 @@ HTML_TEMPLATE = """
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh; color: white; padding: 20px;
+            line-height: 1.6; display: flex; flex-direction: column; align-items: center;
         }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { text-align: center; margin-bottom: 30px; font-weight: 300; }
-        .section { background: rgba(255,255,255,0.1); padding: 20px; margin: 20px 0; 
-                  border-radius: 12px; backdrop-filter: blur(10px); }
-        .input-group { margin-bottom: 15px; }
+        .container { max-width: 800px; width: 100%; padding: 15px; margin: 20px auto; }
+        h1 { text-align: center; margin-bottom: 30px; font-weight: 300; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        h2 { margin-bottom: 20px; font-weight: 500; color: rgba(255,255,255,0.95); }
+        .section { background: rgba(255,255,255,0.08); padding: 20px; margin: 20px 0;
+                  border-radius: 12px; backdrop-filter: blur(10px); margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .input-group { /* margin-bottom: 15px; */ }
         input, textarea, select { width: 100%; padding: 12px; border: none; border-radius: 8px;
                                  background: rgba(255,255,255,0.9); color: #333; }
+        textarea#entry-content {
+            resize: vertical; min-height: 80px;
+            background: rgba(255,255,255,0.95); color: #222; border: 1px solid rgba(0,0,0,0.1);
+            transition: box-shadow 0.3s ease, border-color 0.3s ease;
+            font-size: 16px;
+        }
+        textarea#entry-content:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.3);
+            outline: none;
+        }
         button { background: #4CAF50; color: white; padding: 12px 24px; border: none;
                 border-radius: 8px; cursor: pointer; font-weight: 500; }
+        /* Default button:hover is fine for other buttons for now */
         button:hover { background: #45a049; }
+
+        #capture-button {
+            padding: 10px 20px; font-size: 16px; display: inline-flex; align-items: center; gap: 8px;
+            background-color: #5cb85c; /* A friendly green */
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            font-weight: 500;
+        }
+        #capture-button:hover {
+            background-color: #4cae4c;
+            transform: translateY(-1px);
+        }
+        #capture-button:active {
+            background-color: #449d44;
+            transform: translateY(0);
+        }
         .priority-task { background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px;
                         margin: 10px 0; font-size: 18px; text-align: center; }
-        .entries { max-height: 200px; overflow-y: auto; }
-        .entry { background: rgba(255,255,255,0.1); padding: 10px; margin: 5px 0; border-radius: 6px; }
+        .entries {
+            margin-top: 20px;
+            max-height: 300px; /* Increased max-height */
+            overflow-y: auto;
+            padding-right: 10px; /* For scrollbar */
+        }
+        .entries p { /* Styling for "No entries yet" message */
+            color: rgba(255,255,255,0.6);
+            text-align: center;
+            padding: 20px;
+        }
+        /* .entry { background: rgba(255,255,255,0.1); padding: 10px; margin: 5px 0; border-radius: 6px; } */ /* Old style, replaced by entry-card */
+        .entry-card {
+            background: rgba(255,255,255,0.85); /* More opaque */
+            color: #333; /* Darker text for better contrast */
+            padding: 15px; margin-bottom: 10px; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Added box-shadow transition */
+        }
+        .entry-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .entry-card-content {
+            margin-bottom: 8px;
+            font-size: 1em;
+            color: #333;
+            line-height: 1.5;
+        }
+        .entry-card-date {
+            font-size: 0.75em;
+            color: #777;
+            margin-top: 8px;
+            display: block;
+            text-align: right;
+        }
         .projects { display: grid; gap: 15px; }
         .project { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; }
         .hidden { display: none; }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 2em; }
+            .container { padding: 10px; margin-top: 10px; margin-bottom: 10px; }
+            #capture-button {
+                width: 100%;
+                margin-top: 10px;
+                padding: 12px; /* Slightly larger padding for tap */
+            }
+            textarea#entry-content { font-size: 15px; } /* Adjust if needed */
+            .section { padding: 15px; }
+            h2 { font-size: 1.5em; }
+        }
     </style>
 </head>
 <body>
@@ -79,17 +155,17 @@ HTML_TEMPLATE = """
         </div>
 
         <!-- Quick Entry -->
-        <div class="section">
-            <h2>💭 Rapid Capture</h2>
+        <div class="section" id="rapid-capture-section">
+            <h2>💭 Quick Note</h2>
             <div class="input-group">
-                <textarea id="entry-content" placeholder="Dump any thought, idea, achievement, or pain point..." rows="3"></textarea>
+                <textarea id="entry-content" placeholder="What's on your mind? Tell me everything..." rows="4" aria-label="Note content"></textarea>
             </div>
-            <button onclick="createEntry()">Capture</button>
+            <button id="capture-button" onclick="createEntry()">📝 Capture Note</button>
         </div>
 
         <!-- Recent Entries -->
         <div class="section">
-            <h2>📝 Recent Captures</h2>
+            <h2>📝 My Notes</h2>
             <div id="entries" class="entries">Loading entries...</div>
         </div>
 
@@ -156,9 +232,16 @@ HTML_TEMPLATE = """
         async function loadEntries() {
             const entries = await api('/entries');
             const container = document.getElementById('entries');
-            container.innerHTML = entries.slice(0, 10).map(entry => 
-                `<div class="entry">${entry.content} <small>(${new Date(entry.created_at).toLocaleDateString()})</small></div>`
-            ).join('');
+            if (entries && entries.length > 0) {
+                container.innerHTML = entries.slice(0, 10).map(entry => `
+                    <div class="entry-card">
+                        <p class="entry-card-content">${entry.content ? entry.content.replace(/\\n/g, '<br>') : 'No content'}</p>
+                        <small class="entry-card-date">Captured: ${entry.created_at ? new Date(entry.created_at).toLocaleDateString() : 'N/A'}</small>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = "<p>No entries yet. Start capturing your thoughts!</p>";
+            }
         }
 
         // Load Projects
