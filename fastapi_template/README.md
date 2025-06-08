@@ -8,39 +8,46 @@ Academic researchers and knowledge workers need rapid idea capture without frict
 ## The Solution
 - **Rapid Capture**: Dump any thought in 2 seconds
 - **Priority Focus**: See your most important task instantly  
-- **Goal Hierarchy**: Projects → Milestones → Tasks
-- **Your Data**: Everything lives in your Notion workspace
+- **Goal Hierarchy**: Projects → Milestones → Tasks (Managed by backend API)
+- **Your Data**: Data is managed by a backend service, accessible via this portal.
 
 ## Philosophy
 **Elegant Simplicity**: One input field. One priority task. Zero cognitive overhead.
 
 ---
 
-## 🚀 Setup (2 minutes)
+## ⚙️ Configuration
 
-### 1. Run Setup
+This application connects to a backend API to manage data. You need to configure the following environment variable:
+
+*   `API_BASE_URL`: The base URL of the rhythmic-rituals-api server (e.g., `https://your-api-server.com/api`).
+
+Set this environment variable before running the application. For example, you can create a `.env` file in the project root:
+```
+API_BASE_URL=https://your-api-server.com/api
+```
+Or set it in your shell:
 ```bash
-python setup.py
+export API_BASE_URL="https://your-api-server.com/api"
 ```
 
-This will:
-- Install dependencies
-- Guide you through Notion integration
-- Create required databases
-- Generate your `.env` file
+## 🚀 Launch
 
-### 2. Share Databases
-In Notion, share each created database with your integration:
-- 📝 Ideas & Entries  
-- 🏆 Projects
-- 📍 Milestones
-- ✅ Tasks
+1.  **Install dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+2.  **Set `API_BASE_URL`**: Ensure the environment variable is set as described above.
+3.  **Run the application**:
+    ```bash
+    python -m uvicorn fastapi_template.main:app --reload
+    ```
+    Or if you have `main.py` in the root and adjust imports:
+    ```bash
+    python main.py
+    ```
+    Visit `http://localhost:8000` (or the port specified by uvicorn).
 
-### 3. Launch
-```bash
-python main.py
-```
-Visit `http://localhost:8000`
 
 ---
 
@@ -58,24 +65,25 @@ Visit `http://localhost:8000`
 4. **Repeat**: Let the system surface what matters next
 
 **The Data Flow:**
-- Every capture → Notion "Ideas & Entries" database
-- Projects → Structured in Notion with milestones and tasks
-- Priority algorithm → Surfaces most important incomplete task
-- Your workspace → All data accessible in Notion forever
+- Every capture → Sent to the backend API.
+- Projects → Managed via the backend API.
+- Priority algorithm → Handled by the backend API.
+- Your data → Accessible through this portal, managed by the backend service.
 
 ---
 
-## 📁 Architecture (3 files)
+## 📁 Architecture
 
+This FastAPI application serves as a user interface for a productivity portal. It communicates with an external API (specified by `API_BASE_URL`) which in turn manages the data persistence, potentially using Notion or other services.
 
+The main components are:
 ```
-main.py      # Single-file FastAPI app with embedded HTML/CSS/JS
-notion.py    # Notion database integration
-setup.py     # One-command setup script
-README.md    # This file
+fastapi_template/main.py  # FastAPI application, serves HTML and API routes
+fastapi_template/notion.py # APIClient for communicating with the backend server
+requirements.txt          # Python dependencies
+README.md                 # This file
 ```
-
-**Total Lines**: ~350 lines across 4 files
+The application is designed to be lightweight and focused on providing a swift user experience, while delegating data management to a dedicated backend service.
 
 ---
 
@@ -85,7 +93,7 @@ README.md    # This file
 
 **Speed Over Polish**: Get thoughts captured in 2 seconds, not 20.
 
-**Your Data**: Notion as backend means you own everything forever.
+**Your Data**: Data is managed by the backend API, providing flexibility in storage.
 
 **Zero Lock-in**: Standard web technologies. Fork it. Modify it. Own it.
 
