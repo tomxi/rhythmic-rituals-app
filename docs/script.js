@@ -9,13 +9,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return response.json();
         })
-        .then(notes => {
-            if (notes && notes.data && Array.isArray(notes.data)) {
-                if (notes.data.length === 0) {
+        .then(responseData => { // Renamed 'notes' to 'responseData' for clarity
+            if (Array.isArray(responseData)) { // Check if the response itself is an array
+                if (responseData.length === 0) {
                     notesContainer.innerHTML = '<p>No notes found.</p>';
                     return;
                 }
-                notes.data.forEach(note => {
+                responseData.forEach(note => {
                     const noteElement = document.createElement('div');
                     noteElement.classList.add('note');
 
@@ -31,8 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContainer.appendChild(noteElement);
                 });
             } else {
-                console.error('API response is not in the expected format:', notes);
-                notesContainer.innerHTML = '<p>Error: Could not parse notes data.</p>';
+                console.error('API response is not in the expected array format:', responseData);
+                notesContainer.innerHTML = '<p>Error: Could not parse notes data. Expected an array.</p>';
             }
         })
         .catch(error => {
