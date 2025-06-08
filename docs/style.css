@@ -1,0 +1,36 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1 {
+    color: #333;
+}
+
+#notes-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.note {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    width: 300px; /* Adjust as needed */
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+}
+
+.note h2 {
+    margin-top: 0;
+    font-size: 1.2em;
+    color: #007bff; /* Blue title for notes */
+}
+
+.note p {
+    font-size: 1em;
+    line-height: 1.6;
+}
