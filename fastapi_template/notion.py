@@ -1,236 +1,104 @@
-# notion.py
 import os
+import requests
 from typing import List, Dict, Optional, Any
-from datetime import datetime
-from notion_client import Client
-from dotenv import load_dotenv
+from fastapi import HTTPException
 
-load_dotenv()
+class APIClient:
+    def __init__(self):
+        self.base_url = os.getenv("API_BASE_URL")
+        if not self.base_url:
+            # In a real scenario, you might want to log this or handle it more gracefully
+            # For now, raising ValueError is consistent with the original NotionDB behavior
+            raise ValueError("API_BASE_URL environment variable is not set.")
 
-class NotionDB:
-    """Minimal Notion integration for productivity portal."""
-    
-    def __init__(self, token: str = None):
-        self.token = token or os.getenv("NOTION_TOKEN")
-        if not self.token:
-            raise ValueError("Notion token is required")
-        
-        self.client = Client(auth=self.token)
-        self.entries_db = os.getenv("NOTION_ENTRIES_DB")
-        self.projects_db = os.getenv("NOTION_PROJECTS_DB")
-        self.milestones_db = os.getenv("NOTION_MILESTONES_DB")
-        self.tasks_db = os.getenv("NOTION_TASKS_DB")
-        
-        # Test connection and get workspace info
-        self._validate_connection()
-    
-    def _validate_connection(self):
-        """Validate the Notion connection and set up databases if needed."""
+    def _request(self, method: str, endpoint: str, json_data: Optional[Dict] = None) -> Any:
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         try:
-            # Test the connection by getting user info
-            user_info = self.client.users.me()
-            
-            # If databases are not configured, create them
-            if not all([self.entries_db, self.projects_db, self.milestones_db, self.tasks_db]):
-                self._setup_databases()
-        except Exception as e:
-            raise ValueError(f"Failed to connect to Notion: {str(e)}")
-    
-    def _setup_databases(self):
-        """Set up required databases if they don't exist."""
-        try:
-            # Create databases
-            db_ids = create_notion_databases(self.token)
-            
-            # Update instance variables
-            self.entries_db = db_ids["entries"]
-            self.projects_db = db_ids["projects"]
-            self.milestones_db = db_ids["milestones"]
-            self.tasks_db = db_ids["tasks"]
-            
-        except Exception as e:
-            raise ValueError(f"Failed to set up databases: {str(e)}")
-    
-    def create_entry(self, content: str, tags: List[str] = None) -> Dict:
-        """Create a new entry in Notion."""
-        properties = {
-            "Content": {"title": [{"text": {"content": content}}]},
-            "Created": {"date": {"start": datetime.now().isoformat()}},
-        }
-        if tags:
-            properties["Tags"] = {"multi_select": [{"name": tag} for tag in tags]}
-        
-        return self.client.pages.create(
-            parent={"database_id": self.entries_db},
-            properties=properties
-        )
-    
-    def get_entries(self, limit: int = 50) -> List[Dict]:
-        """Get recent entries from Notion."""
-        response = self.client.databases.query(
-            database_id=self.entries_db,
-            sorts=[{"property": "Created", "direction": "descending"}],
-            page_size=limit
-        )
-        
-        entries = []
-        for page in response["results"]:
-            content = ""
-            if page["properties"]["Content"]["title"]:
-                content = page["properties"]["Content"]["title"][0]["text"]["content"]
-            
-            created_at = page["properties"]["Created"]["date"]["start"] if page["properties"]["Created"]["date"] else ""
-            
-            entries.append({
-                "id": page["id"],
-                "content": content,
-                "created_at": created_at
-            })
-        
-        return entries
-    
-    def create_project(self, name: str, description: str, deadline: str = None) -> Dict:
-        """Create a new project in Notion."""
-        properties = {
-            "Name": {"title": [{"text": {"content": name}}]},
-            "Description": {"rich_text": [{"text": {"content": description}}]},
-            "Status": {"select": {"name": "Active"}},
-            "Created": {"date": {"start": datetime.now().isoformat()}},
-        }
-        if deadline:
-            properties["Deadline"] = {"date": {"start": deadline}}
-        
-        return self.client.pages.create(
-            parent={"database_id": self.projects_db},
-            properties=properties
-        )
-    
-    def get_projects(self) -> List[Dict]:
-        """Get all projects from Notion."""
-        response = self.client.databases.query(
-            database_id=self.projects_db,
-            sorts=[{"property": "Created", "direction": "descending"}]
-        )
-        
-        projects = []
-        for page in response["results"]:
-            name = ""
-            if page["properties"]["Name"]["title"]:
-                name = page["properties"]["Name"]["title"][0]["text"]["content"]
-            
-            description = ""
-            if page["properties"]["Description"]["rich_text"]:
-                description = page["properties"]["Description"]["rich_text"][0]["text"]["content"]
-            
-            deadline = ""
-            if page["properties"].get("Deadline", {}).get("date"):
-                deadline = page["properties"]["Deadline"]["date"]["start"]
-            
-            projects.append({
-                "id": page["id"],
-                "name": name,
-                "description": description,
-                "deadline": deadline
-            })
-        
-        return projects
-    
-    def get_priority_task(self) -> Optional[Dict]:
-        """Get the highest priority incomplete task."""
-        try:
-            response = self.client.databases.query(
-                database_id=self.tasks_db,
-                filter={
-                    "property": "Status",
-                    "select": {"does_not_equal": "Completed"}
-                },
-                sorts=[
-                    {"property": "Priority", "direction": "descending"},
-                    {"property": "Created", "direction": "ascending"}
-                ],
-                page_size=1
-            )
-            
-            if not response["results"]:
+            response = requests.request(method, url, json=json_data, timeout=10)
+            response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
+            if response.status_code == 204:  # No Content
                 return None
-            
-            page = response["results"][0]
-            name = ""
-            if page["properties"]["Name"]["title"]:
-                name = page["properties"]["Name"]["title"][0]["text"]["content"]
-            
-            description = ""
-            if page["properties"]["Description"]["rich_text"]:
-                description = page["properties"]["Description"]["rich_text"][0]["text"]["content"]
-            
-            return {
-                "id": page["id"],
-                "name": name,
-                "description": description
-            }
-        except:
-            return None
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            # Log the error details for server-side inspection
+            error_detail = f"External API HTTP error: {e.response.status_code} {e.response.reason}"
+            if e.response.text:
+                error_detail += f" - {e.response.text[:500]}" # Include some of the response text
+            print(f"Error during API request to {url}: {error_detail}")
+            # Raise HTTPException to be caught by FastAPI and returned to the client
+            raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+        except requests.exceptions.Timeout:
+            print(f"Timeout during API request to {url}")
+            raise HTTPException(status_code=504, detail="External API request timed out.")
+        except requests.exceptions.RequestException as e:
+            # Catch other request-related errors (e.g., connection error)
+            print(f"Request exception during API request to {url}: {e}")
+            raise HTTPException(status_code=503, detail=f"Service unavailable: Error connecting to external API ({e.__class__.__name__}).")
 
-def create_notion_databases(token: str, parent_page_id: str = None) -> Dict[str, str]:
-    """Create all required Notion databases."""
-    client = Client(auth=token)
-    parent = {"type": "page_id", "page_id": parent_page_id} if parent_page_id else {"type": "workspace", "workspace": True}
-    
-    # Entries Database
-    entries_db = client.databases.create(
-        parent=parent,
-        title=[{"text": {"content": "📝 Ideas & Entries"}}],
-        properties={
-            "Content": {"title": {}},
-            "Tags": {"multi_select": {}},
-            "Created": {"date": {}}
+    def create_entry(self, content: str, tags: Optional[List[str]] = None) -> Dict:
+        # Based on notes.js, the API expects 'title' and 'content'.
+        # We'll use the provided 'content' for both, or part of it for 'title'.
+        # Tags are not supported by the notes.js example.
+        payload = {
+            "title": content[:100],  # Use the first 100 chars of content as title
+            "content": content
         }
-    )
-    
-    # Projects Database
-    projects_db = client.databases.create(
-        parent=parent,
-        title=[{"text": {"content": "🏆 Projects"}}],
-        properties={
-            "Name": {"title": {}},
-            "Description": {"rich_text": {}},
-            "Status": {"select": {"options": [{"name": "Active"}, {"name": "Completed"}, {"name": "On Hold"}]}},
-            "Deadline": {"date": {}},
-            "Created": {"date": {}}
-        }
-    )
-    
-    # Milestones Database
-    milestones_db = client.databases.create(
-        parent=parent,
-        title=[{"text": {"content": "📍 Milestones"}}],
-        properties={
-            "Name": {"title": {}},
-            "Description": {"rich_text": {}},
-            "Project": {"relation": {"database_id": projects_db["id"]}},
-            "Status": {"select": {"options": [{"name": "Active"}, {"name": "Completed"}]}},
-            "Deadline": {"date": {}},
-            "Created": {"date": {}}
-        }
-    )
-    
-    # Tasks Database
-    tasks_db = client.databases.create(
-        parent=parent,
-        title=[{"text": {"content": "✅ Tasks"}}],
-        properties={
-            "Name": {"title": {}},
-            "Description": {"rich_text": {}},
-            "Milestone": {"relation": {"database_id": milestones_db["id"]}},
-            "Priority": {"number": {}},
-            "Status": {"select": {"options": [{"name": "Todo"}, {"name": "In Progress"}, {"name": "Completed"}]}},
-            "Created": {"date": {}}
-        }
-    )
-    
-    return {
-        "entries": entries_db["id"],
-        "projects": projects_db["id"],
-        "milestones": milestones_db["id"],
-        "tasks": tasks_db["id"]
-    }
+        # notes.js returns: { message: "Note added successfully", id: response.id }
+        # The original app expects something like: {"id": result["id"], "message": "Entry captured"}
+        response_data = self._request("POST", "api/notes", json_data=payload) # Assuming /api/notes from notes.js
+        if response_data and "id" in response_data:
+            return {"id": response_data["id"], "message": response_data.get("message", "Entry captured")}
+        raise HTTPException(status_code=500, detail="Failed to create entry or unexpected response format.")
+
+
+    def get_entries(self, limit: int = 50) -> List[Dict]:
+        # notes.js (target API) returns: [{id, title, content, last_edited_time}]
+        # This app's frontend (main.py HTML_TEMPLATE JS) expects: [{id, content, created_at}]
+        api_response = self._request("GET", "api/notes") # Assuming /api/notes from notes.js
+        entries = []
+        if isinstance(api_response, list):
+            for item in api_response:
+                if not isinstance(item, dict):
+                    print(f"Skipping malformed item in get_entries: {item}")
+                    continue
+                entries.append({
+                    "id": item.get("id"),
+                    "content": item.get("content", item.get("title", "No content available")),
+                    "created_at": item.get("last_edited_time")
+                })
+        elif api_response is not None: # If it's not a list but also not None, it's an unexpected format
+             print(f"Unexpected response format from get_entries: {api_response}")
+             raise HTTPException(status_code=500, detail="Unexpected response format from external API for entries.")
+        return entries
+
+    def create_project(self, name: str, description: str, deadline: Optional[str] = None) -> Dict:
+        # This endpoint /api/projects is an assumption.
+        # Assuming server expects {name, description, deadline} and returns {id, message}
+        payload = {"name": name, "description": description}
+        if deadline:
+            payload["deadline"] = deadline
+        
+        response_data = self._request("POST", "api/projects", json_data=payload)
+        if response_data and "id" in response_data:
+             return {"id": response_data["id"], "message": response_data.get("message", "Project created")}
+        raise HTTPException(status_code=500, detail="Failed to create project or unexpected response format.")
+
+
+    def get_projects(self) -> List[Dict]:
+        # This endpoint /api/projects is an assumption.
+        # Assumes server returns list of projects: [{id, name, description, deadline}]
+        # This matches what the frontend expects.
+        api_response = self._request("GET", "api/projects")
+        if isinstance(api_response, list):
+            return api_response
+        elif api_response is not None:
+            print(f"Unexpected response format from get_projects: {api_response}")
+            raise HTTPException(status_code=500, detail="Unexpected response format from external API for projects.")
+        return []
+
+    def get_priority_task(self) -> Optional[Dict]:
+        # This endpoint /api/priority-task is an assumption.
+        # Assumes server returns a single task object: {id, name, description}
+        # or a message like {"message": "No tasks available..."}
+        # This matches what the frontend expects.
+        return self._request("GET", "api/priority-task")

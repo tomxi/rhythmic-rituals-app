@@ -1,13 +1,13 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request # Added Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+# Removed: from datetime import datetime
 import os
-from notion import NotionDB
+from .notion import APIClient # Updated import
 
-# Data Models
+# Data Models (EntryRequest, ProjectRequest remain unchanged)
 class EntryRequest(BaseModel):
     content: str
     tags: Optional[List[str]] = []
@@ -20,82 +20,21 @@ class ProjectRequest(BaseModel):
 # Initialize FastAPI
 app = FastAPI(title="Lean Productivity Portal", version="2.0.0")
 
-# Initialize Notion DB
-notion_db = None
+# Initialize API Client
+api_client: Optional[APIClient] = None
 
-# Check if Notion is configured
-NOTION_TOKEN = os.getenv('NOTION_TOKEN')
-if NOTION_TOKEN:
-    notion_db = NotionDB(NOTION_TOKEN)
+@app.on_event("startup")
+async def startup_event():
+    global api_client
+    try:
+        api_client = APIClient()
+        print("APIClient initialized successfully.")
+    except ValueError as e:
+        print(f"CRITICAL: Failed to initialize APIClient during startup: {e}")
+        # api_client remains None. Subsequent requests relying on it will fail.
+        # This allows the app to start and potentially serve static content or health checks.
 
-# Embedded HTML Template
-NOTION_SETUP_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Setup Notion Integration</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh; color: white; padding: 20px;
-        }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { text-align: center; margin-bottom: 30px; font-weight: 300; }
-        .setup-box { background: rgba(255,255,255,0.1); padding: 20px; margin: 20px 0; 
-                  border-radius: 12px; backdrop-filter: blur(10px); }
-        .input-group { margin-bottom: 15px; }
-        input { width: 100%; padding: 12px; border: none; border-radius: 8px;
-               background: rgba(255,255,255,0.9); color: #333; }
-        button { background: #4CAF50; color: white; padding: 12px 24px; border: none;
-                border-radius: 8px; cursor: pointer; font-weight: 500; }
-        button:hover { background: #45a049; }
-        .instructions { margin-top: 20px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔗 Setup Notion Integration</h1>
-        <div class="setup-box">
-            <div class="input-group">
-                <input type="text" id="notion-token" placeholder="Enter your Notion integration token">
-            </div>
-            <button onclick="setupNotion()">Connect</button>
-            <div class="instructions">
-                <h3>How to get your token:</h3>
-                <ol>
-                    <li>Go to <a href="https://www.notion.so/my-integrations" target="_blank">Notion Integrations</a></li>
-                    <li>Create a new integration</li>
-                    <li>Copy the token and paste it here</li>
-                </ol>
-            </div>
-        </div>
-    </div>
-    <script>
-        async function setupNotion() {
-            const token = document.getElementById('notion-token').value.trim();
-            if (!token) return;
-            
-            const response = await fetch('/api/setup-notion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: token })
-            });
-            
-            if (response.ok) {
-                window.location.reload();
-            } else {
-                alert('Failed to connect. Please check your token.');
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-
+# HTML_TEMPLATE (remains unchanged, but NOTION_SETUP_TEMPLATE is removed)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -253,47 +192,51 @@ HTML_TEMPLATE = """
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    if not notion_db:
-        return HTMLResponse(content=NOTION_SETUP_TEMPLATE)
-    return HTMLResponse(content=HTML_TEMPLATE)
+async def root(request: Request): # Added request: Request
+    if api_client is None:
+        # Simplified error message for now.
+        return HTMLResponse(
+            content="<h1>Service Not Configured</h1><p>The application is not properly configured to connect to the backend API. Please contact support or check server logs.</p>",
+            status_code=503
+        )
+    return HTMLResponse(content=HTML_TEMPLATE) # HTML_TEMPLATE is defined below this
 
-class TokenRequest(BaseModel):
-    token: str
-
-@app.post("/api/setup-notion")
-async def setup_notion(request: TokenRequest):
-    global notion_db
-    try:
-        # Test the connection by creating a NotionDB instance
-        test_db = NotionDB(request.token)
-        notion_db = test_db
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+# Removed TokenRequest model and /api/setup-notion route
 
 @app.post("/api/entries")
 async def create_entry(entry: EntryRequest):
-    result = notion_db.create_entry(entry.content, entry.tags)
-    return {"id": result["id"], "message": "Entry captured"}
+    if api_client is None:
+        raise HTTPException(status_code=503, detail="API client not initialized. Service is unavailable.")
+    # Assuming APIClient.create_entry might raise HTTPException for API errors
+    return api_client.create_entry(entry.content, entry.tags)
 
 @app.get("/api/entries")
 async def get_entries():
-    return notion_db.get_entries()
+    if api_client is None:
+        raise HTTPException(status_code=503, detail="API client not initialized. Service is unavailable.")
+    return api_client.get_entries()
 
 @app.get("/api/priority-task")
 async def get_priority_task():
-    task = notion_db.get_priority_task()
-    return task if task else {"message": "No tasks available. Create a project to get started!"}
+    if api_client is None:
+        raise HTTPException(status_code=503, detail="API client not initialized. Service is unavailable.")
+    task = api_client.get_priority_task()
+    # Original code had: return task if task else {"message": "No tasks available. Create a project to get started!"}
+    # APIClient.get_priority_task should ideally return a similar structure or this logic needs to adapt.
+    # Assuming APIClient.get_priority_task() now returns the dict with "message" if no task.
+    return task
 
 @app.post("/api/projects")
 async def create_project(project: ProjectRequest):
-    result = notion_db.create_project(project.name, project.description, project.deadline)
-    return {"id": result["id"], "message": "Project created"}
+    if api_client is None:
+        raise HTTPException(status_code=503, detail="API client not initialized. Service is unavailable.")
+    return api_client.create_project(project.name, project.description, project.deadline)
 
 @app.get("/api/projects")
 async def get_projects():
-    return notion_db.get_projects()
+    if api_client is None:
+        raise HTTPException(status_code=503, detail="API client not initialized. Service is unavailable.")
+    return api_client.get_projects()
 
 @app.get("/health")
 async def health():
